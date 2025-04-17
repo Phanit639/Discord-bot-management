@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}จัดการยศในแชท - ระบบจัดการบอท Discord{% endblock %}
+
+{% block head %}
+<style>
+    .setting-card {
+        margin-bottom: 20px;
+    }
+    .card-header .btn-refresh {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.8rem;
+    }
+    .invalid-feedback {
+        display: none;
+    }
+    .is-invalid ~ .invalid-feedback {
+        display: block;
+    }
+    .roles-select {
+        width: 100%;
+        height: auto !important; /* ป้องกันความสูงผิดปกติ */
+    }
+    .select2-container .select2-selection--multiple {
+        min-height: 38px; /* ปรับความสูงให้สอดคล้องกับ Bootstrap */
+    }
+</style>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h2><i class="fas fa-shield-alt"></i> จัดการยศในแชท</h2>
+    <div>
+        <button id="save-all-settings" class="btn btn-success">
+            <i class="fas fa-save"></i> บันทึกการตั้งค่า
+        </button>
+    </div>
+</div>
+
+<form id="settings-form" method="POST" action="/settings/roles">
+    <div class="row">
+        <div class="card setting-card">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-shield-alt"></i> ตั้งค่าการจัดการยศ</h5>
+                <button type="button" id="add-mapping-btn" class="btn btn-sm btn-light">
+                    <i class="fas fa-plus"></i> เพิ่มการตั้งค่า
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i> เลือกหมวดหมู่, คำสั่ง, และยศที่ต้องการเพิ่มหรือถอนเมื่อใช้คำสั่งในช่องแชท
+                </div>
+                <div id="role-mappings-container">
+                    {% for mapping in config.role_mappings %}
+                    <div class="role-mapping mb-4" data-mapping-id="{{ loop.index0 }}">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-bold">{{ mapping.name if mapping.name else "การตั้งค่า #" + loop.index|string }}</h6>
+                            <button type="button" class="btn btn-sm btn-danger delete-mapping-btn">
+                                <i class="fas fa-trash"></i> ลบ
+                            </button>
+                        </div>
+                        <div class="mb-3">
+                            <label>ชื่อการตั้งค่า:</label>
+                            <input type="text" name="name_{{ loop.index0 }}" class="form-control mapping-name-input" value="{{ mapping.name if mapping.name else '' }}" placeholder="เช่น การตั้งค่าฟาร์มแรกน่า">
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label>หมวดหมู่:</label>
+                                <select name="category_id_{{ loop.index0 }}" class="form-select">
+                                    <option value="">-- เลือกหมวดหมู่ --</option>
+                                    {% for id, name in config.categories.items() %}
+                                    <option value="{{ id }}" {% if id == mapping.category_id %}selected{% endif %}>{{ name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label>คำสั่ง:</label>
+                                <select name="command_{{ loop.index0 }}" class="form-select">
+                                    <option value="">-- เลือกคำสั่ง --</option>
+                                    {% for cmd_name in config.messages.keys() %}
+                                    <option value="{{ cmd_name }}" {% if cmd_name == mapping.command %}selected{% endif %}>!{{ cmd_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label>การกระทำ:</label>
+                                <select name="action_{{ loop.index0 }}" class="form-select">
+                                    <option value="add" {% if mapping.action == "add" %}selected{% endif %}>เพิ่มยศ</option>
+                                    <option value="remove" {% if mapping.action == "remove" %}selected{% endif %}>ถอนยศ</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label>ยศที่ต้องการ:</label>
+                            <select name="role_ids_{{ loop.index0 }}" class="form-select roles-select" multiple>
+                                {% for role in roles %}
+                                <option value="{{ role.id }}" {% if role.id in mapping.role_ids %}selected{% endif %}>{{ role.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <hr>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div id="new-mapping-template" class="d-none">
+                    <div class="role-mapping mb-4" data-mapping-id="NEW_MAPPING">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="fw-bold">การตั้งค่าใหม่</h6>
+                            <button type="button" class="btn btn-sm btn-danger delete-mapping-btn">
+                                <i class="fas fa-trash"></i> ลบ
+                            </button>
+                        </div>
+                        <div class="mb-3">
+                            <label>ชื่อการตั้งค่า:</label>
+                            <input type="text" class="form-control mapping-name-input" placeholder="เช่น การตั้งค่าฟาร์มแรกน่า">
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label>หมวดหมู่:</label>
+                                <select class="form-select category-select">
+                                    <option value="">-- เลือกหมวดหมู่ --</option>
+                                    {% for id, name in config.categories.items() %}
+                                    <option value="{{ id }}">{{ name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label>คำสั่ง:</label>
+                                <select class="form-select command-select">
+                                    <option value="">-- เลือกคำสั่ง --</option>
+                                    {% for cmd_name in config.messages.keys() %}
+                                    <option value="{{ cmd_name }}">!{{ cmd_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="col-md-4">
+                                <label>การกระทำ:</label>
+                                <select class="form-select action-select">
+                                    <option value="add">เพิ่มยศ</option>
+                                    <option value="remove">ถอนยศ</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label>ยศที่ต้องการ:</label>
+                            <select class="form-select roles-select" multiple>
+                                {% for role in roles %}
+                                <option value="{{ role.id }}">{{ role.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <hr>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="d-grid gap-2 col-md-6 mx-auto my-4">
+        <button type="submit" class="btn btn-lg btn-success">
+            <i class="fas fa-save"></i> บันทึกการตั้งค่า
+        </button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script>
+$(document).ready(function() {
+    // เริ่มต้น Select2 สำหรับเลือกยศ
+    $('.roles-select').select2({
+        placeholder: "เลือกยศ",
+        allowClear: true,
+        width: '100%'
+    });
+
+    setupMappingEvents();
+
+    $('#add-mapping-btn').on('click', function(e) {
+        e.preventDefault();
+        const template = $('#new-mapping-template').html();
+        const newId = 'NEW_' + Date.now();
+        const newMapping = $(template).attr('data-mapping-id', newId);
+        $('#role-mappings-container').append(newMapping);
+        newMapping.find('.roles-select').select2({
+            placeholder: "เลือกยศ",
+            allowClear: true,
+            width: '100%'
+        });
+        $('html, body').animate({
+            scrollTop: newMapping.offset().top - 100
+        }, 500);
+        setupMappingEvents();
+    });
+
+    $('#settings-form').submit(function(e) {
+        e.preventDefault();
+        const mappings = collectMappings();
+        console.log("Role mappings to send:", mappings);
+        const submitBtn = $(this).find('button[type="submit"]');
+        const originalBtnText = submitBtn.html();
+        submitBtn.html('<i class="fas fa-spinner fa-spin"></i> กำลังบันทึก...');
+        submitBtn.prop('disabled', true);
+        $.ajax({
+            url: '/settings/roles',
+            type: 'POST',
+            data: { role_mappings: JSON.stringify(mappings) },
+            success: function(response) {
+                alert('บันทึกการตั้งค่าเรียบร้อยแล้ว');
+                location.reload();
+            },
+            error: function(xhr) {
+                console.error('Error saving role mappings:', xhr);
+                alert('เกิดข้อผิดพลาดในการบันทึก: ' + (xhr.responseText || 'ไม่ทราบสาเหตุ'));
+                submitBtn.html(originalBtnText);
+                submitBtn.prop('disabled', false);
+            }
+        });
+    });
+
+    function setupMappingEvents() {
+        $('.delete-mapping-btn').off('click').on('click', function() {
+            if (confirm('คุณแน่ใจหรือไม่ที่จะลบการตั้งค่านี้?')) {
+                $(this).closest('.role-mapping').remove();
+            }
+        });
+    }
+
+    function collectMappings() {
+        const mappings = [];
+        $('.role-mapping').each(function() {
+            const mappingId = $(this).attr('data-mapping-id');
+            if (mappingId.startsWith('NEW_')) {
+                mappings.push({
+                    name: $(this).find('.mapping-name-input').val() || "",
+                    category_id: $(this).find('.category-select').val() || "",
+                    command: $(this).find('.command-select').val() || "",
+                    role_ids: $(this).find('.roles-select').val() || [],
+                    action: $(this).find('.action-select').val() || "add"
+                });
+            } else {
+                const index = mappingId;
+                mappings.push({
+                    name: $(`input[name="name_${index}"]`).val() || "",
+                    category_id: $(`select[name="category_id_${index}"]`).val() || "",
+                    command: $(`select[name="command_${index}"]`).val() || "",
+                    role_ids: $(`select[name="role_ids_${index}"]`).val() || [],
+                    action: $(`select[name="action_${index}"]`).val() || "add"
+                });
+            }
+        });
+        return mappings;
+    }
+
+    $('#save-all-settings').click(function(e) {
+        e.preventDefault();
+        $('#settings-form').submit();
+    });
+
+    let originalFormData = $('#settings-form').serialize();
+    $('#settings-form :input').on('change input', function() {
+        if ($('#settings-form').serialize() !== originalFormData) {
+            window.onbeforeunload = () => "คุณมีการเปลี่ยนแปลงที่ยังไม่ได้บันทึก คุณแน่ใจหรือไม่ที่จะออกจากหน้านี้?";
+        } else {
+            window.onbeforeunload = null;
+        }
+    });
+    $('#settings-form').submit(() => window.onbeforeunload = null);
+});
+</script>
+{% endblock %}
